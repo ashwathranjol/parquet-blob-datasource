@@ -3,114 +3,175 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/ashwathranjol/parquetblob/pkg/models"
 )
 
-// Make sure Datasource implements required interfaces. This is important to do
-// since otherwise we will only get a not implemented error response from plugin in
-// runtime. In this example datasource instance implements backend.QueryDataHandler,
-// backend.CheckHealthHandler interfaces. Plugin should not implement all these
-// interfaces - only those which are required for a particular task.
+type Settings struct {
+	AccountName      string
+	MaxRows          int64
+	ConnectionString string
+}
+
+func LoadSettings(s backend.DataSourceInstanceSettings) (Settings, error) {
+	var jd struct {
+		AccountName string `json:"accountName"`
+		MaxRows     int64  `json:"maxRows"`
+	}
+	if len(s.JSONData) > 0 {
+		if err := json.Unmarshal(s.JSONData, &jd); err != nil {
+			return Settings{}, fmt.Errorf("parse datasource jsonData: %w", err)
+		}
+	}
+	out := Settings{
+		AccountName:      jd.AccountName,
+		MaxRows:          jd.MaxRows,
+		ConnectionString: s.DecryptedSecureJSONData["connectionString"],
+	}
+	if out.MaxRows <= 0 {
+		out.MaxRows = 1_000_000
+	}
+	return out, nil
+}
+
+// redact removes secrets from an error before it can reach logs or the panel.
+func redact(err error, secrets ...string) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	for _, s := range secrets {
+		if s != "" {
+			msg = strings.ReplaceAll(msg, s, "[redacted]")
+		}
+	}
+	return errors.New(msg)
+}
+
+type Datasource struct {
+	engine   *Engine
+	settings Settings
+}
+
 var (
 	_ backend.QueryDataHandler      = (*Datasource)(nil)
 	_ backend.CheckHealthHandler    = (*Datasource)(nil)
 	_ instancemgmt.InstanceDisposer = (*Datasource)(nil)
 )
 
-// NewDatasource creates a new datasource instance.
-func NewDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	return &Datasource{}, nil
+func NewDatasource(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	settings, err := LoadSettings(s)
+	if err != nil {
+		return nil, err
+	}
+	ext, err := FindExtension()
+	if err != nil {
+		return nil, fmt.Errorf("azure extension unavailable (plugin packaging problem): %w", err)
+	}
+	engine, err := NewEngine(ctx, ext, settings.ConnectionString)
+	if err != nil {
+		return nil, redact(err, settings.ConnectionString)
+	}
+	return &Datasource{engine: engine, settings: settings}, nil
 }
 
-// Datasource is an example datasource which can respond to data queries, reports
-// its health and has streaming skills.
-type Datasource struct{}
-
-// Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
-// created. As soon as datasource settings change detected by SDK old datasource instance will
-// be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *Datasource) Dispose() {
-	// Clean up datasource instance resources.
+	if d.engine != nil {
+		d.engine.Close()
+	}
 }
 
-// QueryData handles multiple queries and returns multiple responses.
-// req contains the queries []DataQuery (where each query contains RefID as a unique identifier).
-// The QueryDataResponse contains a map of RefID to the response for each query, and each response
-// contains Frames ([]*Frame).
+type queryModel struct {
+	RawSQL string `json:"rawSql"`
+	Format string `json:"format"`
+}
+
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	// create response struct
-	response := backend.NewQueryDataResponse()
-
-	// loop over queries and execute them individually.
+	resp := backend.NewQueryDataResponse()
 	for _, q := range req.Queries {
-		res := d.query(ctx, req.PluginContext, q)
-
-		// save the response in a hashmap
-		// based on with RefID as identifier
-		response.Responses[q.RefID] = res
+		resp.Responses[q.RefID] = d.query(ctx, q)
 	}
-
-	return response, nil
+	return resp, nil
 }
 
-type queryModel struct{}
-
-func (d *Datasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
-	var response backend.DataResponse
-
-	// Unmarshal the JSON into our queryModel.
+func (d *Datasource) query(ctx context.Context, q backend.DataQuery) backend.DataResponse {
 	var qm queryModel
+	if err := json.Unmarshal(q.JSON, &qm); err != nil {
+		return backend.ErrDataResponse(backend.StatusBadRequest, "invalid query JSON: "+err.Error())
+	}
+	if strings.TrimSpace(qm.RawSQL) == "" {
+		return backend.DataResponse{} // empty query, empty response
+	}
+	sqlText := ExpandMacros(qm.RawSQL, q.TimeRange.From, q.TimeRange.To)
 
-	err := json.Unmarshal(query.JSON, &qm)
+	rows, err := d.engine.Query(ctx, sqlText, d.settings.MaxRows)
 	if err != nil {
-		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
+		// DuckDB SQL errors pass through verbatim (minus secrets) — they are
+		// the most useful debugging signal the user has.
+		return backend.DataResponse{Error: redact(err, d.settings.ConnectionString)}
+	}
+	defer rows.Close()
+
+	frame, truncated, err := FrameFromRows(rows, q.RefID, d.settings.MaxRows)
+	if err != nil {
+		return backend.DataResponse{Error: redact(err, d.settings.ConnectionString)}
+	}
+	if truncated {
+		if frame.Meta == nil {
+			frame.SetMeta(&data.FrameMeta{})
+		}
+		frame.Meta.Notices = append(frame.Meta.Notices, data.Notice{
+			Severity: data.NoticeSeverityWarning,
+			Text: fmt.Sprintf("Row limit reached: showing first %d rows. Refine the query or raise maxRows in the datasource settings.",
+				d.settings.MaxRows),
+		})
 	}
 
-	// create data frame response.
-	// For an overview on data frames and how grafana handles them:
-	// https://grafana.com/developers/plugin-tools/introduction/data-frames
-	frame := data.NewFrame("response")
-
-	// add fields.
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{10, 20}),
-	)
-
-	// add the frames to the response.
-	response.Frames = append(response.Frames, frame)
-
-	return response
+	if qm.Format == "timeseries" {
+		wide, err := data.LongToWide(frame, nil)
+		if err != nil {
+			return backend.DataResponse{Error: fmt.Errorf(
+				"time series format needs a sorted time column plus value columns (long format): %w", err)}
+		}
+		if frame.Meta != nil {
+			wide.SetMeta(frame.Meta)
+		}
+		frame = wide
+	}
+	return backend.DataResponse{Frames: data.Frames{frame}}
 }
 
-// CheckHealth handles health checks sent from Grafana to the plugin.
-// The main use case for these health checks is the test button on the
-// datasource configuration page which allows users to verify that
-// a datasource is working as expected.
-func (d *Datasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	res := &backend.CheckHealthResult{}
-	config, err := models.LoadPluginSettings(*req.PluginContext.DataSourceInstanceSettings)
-
-	if err != nil {
-		res.Status = backend.HealthStatusError
-		res.Message = "Unable to load settings"
-		return res, nil
+func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
+	fail := func(msg string) (*backend.CheckHealthResult, error) {
+		return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: msg}, nil
 	}
-
-	if config.Secrets.ApiKey == "" {
-		res.Status = backend.HealthStatusError
-		res.Message = "API key is missing"
-		return res, nil
+	if d.settings.ConnectionString == "" {
+		return fail("No connection string configured. Set it in the datasource settings.")
 	}
-
-	return &backend.CheckHealthResult{
-		Status:  backend.HealthStatusOk,
-		Message: "Data source is working",
-	}, nil
+	// Probe a container that should not exist: a 404-class error proves auth
+	// worked; a 403/auth-class error means the credentials were rejected.
+	err := d.engine.Exec(ctx,
+		"SELECT count(*) FROM glob('az://grafana-health-probe-nonexistent/*')")
+	if err == nil {
+		return &backend.CheckHealthResult{Status: backend.HealthStatusOk,
+			Message: "Connected to Azure Blob Storage."}, nil
+	}
+	msg := redact(err, d.settings.ConnectionString).Error()
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.Contains(lower, "404") || strings.Contains(lower, "not exist") ||
+		strings.Contains(lower, "containernotfound") || strings.Contains(lower, "no files found"):
+		return &backend.CheckHealthResult{Status: backend.HealthStatusOk,
+			Message: "Connected to Azure Blob Storage (auth accepted)."}, nil
+	case strings.Contains(lower, "403") || strings.Contains(lower, "authentication") ||
+		strings.Contains(lower, "authorization") || strings.Contains(lower, "signature"):
+		return fail("Azure rejected the credentials. Check the connection string. Detail: " + msg)
+	default:
+		return fail("Could not reach the storage account (network/endpoint problem?). Detail: " + msg)
+	}
 }
