@@ -30,7 +30,7 @@ jobs:
           PARQUETBLOB_AZURE_EXT: ${{ github.workspace }}/duckdb_extensions/linux_amd64/azure.duckdb_extension
           AZURITE_BLOB_ENDPOINT: http://127.0.0.1:10000/devstoreaccount1
         run: go test ./pkg/... -v
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "22" }
       - run: npm ci
       - run: npm run typecheck
@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: "22" }
       - run: npm ci
       - run: npm run build
