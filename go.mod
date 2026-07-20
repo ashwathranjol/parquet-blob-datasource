@@ -1,11 +1,11 @@
 module github.com/ashwathranjol/parquetblob
 
-go 1.25.7
+go 1.26.5
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0
 	github.com/duckdb/duckdb-go/v2 v2.10504.0
-	github.com/grafana/grafana-plugin-sdk-go v0.292.0
+	github.com/grafana/grafana-plugin-sdk-go v0.294.0
 )
 
 require (
