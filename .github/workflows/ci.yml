@@ -17,7 +17,7 @@ jobs:
         ports: ["10000:10000"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version: "1.25" }
       - name: Fetch azure extension (linux_amd64 only)
         run: |
@@ -48,7 +48,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version: "1.25" }
       - name: Build (native, CGO on)
         shell: bash
