@@ -1,17 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "type": "datasource",
-  "name": "Parquetblob",
+  "name": "Parquet Blob (Azure)",
   "id": "ashwathranjol-parquetblob-datasource",
   "metrics": true,
   "backend": true,
+  "alerting": true,
   "executable": "gpx_parquetblob",
   "info": {
-    "description": "",
+    "description": "Query Apache Parquet files in Azure Blob Storage with full DuckDB SQL",
     "author": {
       "name": "Ashwathranjol"
     },
-    "keywords": ["datasource"],
+    "keywords": ["parquet", "azure", "blob", "duckdb", "sql"],
     "logos": {
       "small": "img/logo.svg",
       "large": "img/logo.svg"

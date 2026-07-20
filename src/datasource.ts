@@ -1,26 +1,26 @@
-import { DataSourceInstanceSettings, CoreApp, ScopedVars } from '@grafana/data';
+import { CoreApp, DataSourceInstanceSettings, ScopedVars } from '@grafana/data';
 import { DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
+import { DEFAULT_QUERY, ParquetBlobDataSourceOptions, ParquetBlobQuery } from './types';
 
-import { MyQuery, MyDataSourceOptions, DEFAULT_QUERY } from './types';
-
-export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptions> {
-  constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
+export class DataSource extends DataSourceWithBackend<ParquetBlobQuery, ParquetBlobDataSourceOptions> {
+  constructor(instanceSettings: DataSourceInstanceSettings<ParquetBlobDataSourceOptions>) {
     super(instanceSettings);
   }
 
-  getDefaultQuery(_: CoreApp): Partial<MyQuery> {
+  getDefaultQuery(_: CoreApp): Partial<ParquetBlobQuery> {
     return DEFAULT_QUERY;
   }
 
-  applyTemplateVariables(query: MyQuery, scopedVars: ScopedVars) {
+  // Dashboard template variables are expanded in the browser, before the
+  // query reaches the backend (the backend never sees $variables).
+  applyTemplateVariables(query: ParquetBlobQuery, scopedVars: ScopedVars): ParquetBlobQuery {
     return {
       ...query,
-      queryText: getTemplateSrv().replace(query.queryText, scopedVars),
+      rawSql: getTemplateSrv().replace(query.rawSql ?? '', scopedVars),
     };
   }
 
-  filterQuery(query: MyQuery): boolean {
-    // if no query has been provided, prevent the query from being executed
-    return !!query.queryText;
+  filterQuery(query: ParquetBlobQuery): boolean {
+    return !!query.rawSql?.trim();
   }
 }

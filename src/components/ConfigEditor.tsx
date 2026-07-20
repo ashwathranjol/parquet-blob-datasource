@@ -1,69 +1,71 @@
 import React, { ChangeEvent } from 'react';
-import { InlineField, Input, SecretInput } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
-import { MyDataSourceOptions, MySecureJsonData } from '../types';
+import { InlineField, Input, SecretInput } from '@grafana/ui';
+import { ParquetBlobDataSourceOptions, ParquetBlobSecureJsonData } from '../types';
 
-interface Props extends DataSourcePluginOptionsEditorProps<MyDataSourceOptions, MySecureJsonData> {}
+interface Props
+  extends DataSourcePluginOptionsEditorProps<ParquetBlobDataSourceOptions, ParquetBlobSecureJsonData> {}
 
 export function ConfigEditor(props: Props) {
   const { onOptionsChange, options } = props;
   const { jsonData, secureJsonFields, secureJsonData } = options;
 
-  const onPathChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...jsonData,
-        path: event.target.value,
-      },
-    });
-  };
+  const onAccountNameChange = (e: ChangeEvent<HTMLInputElement>) =>
+    onOptionsChange({ ...options, jsonData: { ...jsonData, accountName: e.target.value } });
 
-  // Secure field (only sent to the backend)
-  const onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const onMaxRowsChange = (e: ChangeEvent<HTMLInputElement>) =>
     onOptionsChange({
       ...options,
-      secureJsonData: {
-        apiKey: event.target.value,
-      },
+      jsonData: { ...jsonData, maxRows: e.target.value ? Number(e.target.value) : undefined },
     });
-  };
 
-  const onResetAPIKey = () => {
+  const onConnectionStringChange = (e: ChangeEvent<HTMLInputElement>) =>
     onOptionsChange({
       ...options,
-      secureJsonFields: {
-        ...options.secureJsonFields,
-        apiKey: false,
-      },
-      secureJsonData: {
-        ...options.secureJsonData,
-        apiKey: '',
-      },
+      secureJsonData: { ...secureJsonData, connectionString: e.target.value },
     });
-  };
+
+  const onResetConnectionString = () =>
+    onOptionsChange({
+      ...options,
+      secureJsonFields: { ...secureJsonFields, connectionString: false },
+      secureJsonData: { ...secureJsonData, connectionString: '' },
+    });
 
   return (
     <>
-      <InlineField label="Path" labelWidth={14} interactive tooltip={'Json field returned to frontend'}>
+      <InlineField label="Storage account" labelWidth={22} tooltip="Azure storage account name">
         <Input
-          id="config-editor-path"
-          onChange={onPathChange}
-          value={jsonData.path}
-          placeholder="Enter the path, e.g. /api/v1"
+          id="config-editor-account-name"
+          value={jsonData.accountName ?? ''}
+          onChange={onAccountNameChange}
+          placeholder="mystorageaccount"
           width={40}
         />
       </InlineField>
-      <InlineField label="API Key" labelWidth={14} interactive tooltip={'Secure json field (backend only)'}>
+      <InlineField
+        label="Connection string"
+        labelWidth={22}
+        tooltip="Stored encrypted; never sent back to the browser"
+      >
         <SecretInput
-          required
-          id="config-editor-api-key"
-          isConfigured={secureJsonFields.apiKey}
-          value={secureJsonData?.apiKey}
-          placeholder="Enter your API key"
+          id="config-editor-connection-string"
+          isConfigured={!!secureJsonFields.connectionString}
+          value={secureJsonData?.connectionString ?? ''}
+          onChange={onConnectionStringChange}
+          onReset={onResetConnectionString}
+          placeholder="DefaultEndpointsProtocol=https;AccountName=...;AccountKey=..."
           width={40}
-          onReset={onResetAPIKey}
-          onChange={onAPIKeyChange}
+        />
+      </InlineField>
+      <InlineField label="Max rows" labelWidth={22} tooltip="Row cap per query (default 1,000,000)">
+        <Input
+          id="config-editor-max-rows"
+          type="number"
+          value={jsonData.maxRows ?? ''}
+          onChange={onMaxRowsChange}
+          placeholder="1000000"
+          width={40}
         />
       </InlineField>
     </>
