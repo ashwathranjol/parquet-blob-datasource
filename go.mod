@@ -1,10 +1,10 @@
 module github.com/ashwathranjol/parquetblob
 
-go 1.26.5
+go 1.25.7
 
 require (
 	github.com/duckdb/duckdb-go/v2 v2.10504.0
-	github.com/grafana/grafana-plugin-sdk-go v0.294.0
+	github.com/grafana/grafana-plugin-sdk-go v0.292.0
 )
 
 require (
