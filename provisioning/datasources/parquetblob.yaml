@@ -1,0 +1,12 @@
+apiVersion: 1
+datasources:
+  - name: Parquet Blob (Azurite demo)
+    uid: parquetblob-azurite
+    type: ashwathranjol-parquetblob-datasource
+    access: proxy
+    jsonData:
+      accountName: devstoreaccount1
+      maxRows: 1000000
+    secureJsonData:
+      # Azurite public dev credentials — not a real secret.
+      connectionString: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"

@@ -3,11 +3,14 @@ module github.com/ashwathranjol/parquetblob
 go 1.25.7
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0
 	github.com/duckdb/duckdb-go/v2 v2.10504.0
 	github.com/grafana/grafana-plugin-sdk-go v0.292.0
 )
 
 require (
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/apache/arrow-go/v18 v18.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
