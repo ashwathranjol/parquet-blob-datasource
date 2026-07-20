@@ -61,7 +61,7 @@ jobs:
           mkdir -p out/duckdb_extensions/${{ matrix.duckdb_platform }}
           curl -fsSL "http://extensions.duckdb.org/v${DUCKDB_VERSION}/${{ matrix.duckdb_platform }}/azure.duckdb_extension.gz" \
             | gunzip > out/duckdb_extensions/${{ matrix.duckdb_platform }}/azure.duckdb_extension
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: backend-${{ matrix.goos }}-${{ matrix.goarch }}
           path: out/
@@ -96,7 +96,7 @@ jobs:
         run: |
           docker run --pull=always -v "$PWD:/work" -w /work grafana/plugin-validator-cli \
             -sourceCodeUri file:///work /work/ashwathranjol-parquetblob-datasource.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin-zip
           path: ashwathranjol-parquetblob-datasource.zip
