@@ -2,7 +2,10 @@ module github.com/ashwathranjol/parquetblob
 
 go 1.25.5
 
-require github.com/grafana/grafana-plugin-sdk-go v0.285.0
+require (
+	github.com/duckdb/duckdb-go/v2 v2.10504.0
+	github.com/grafana/grafana-plugin-sdk-go v0.285.0
+)
 
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
@@ -18,7 +21,6 @@ require (
 	github.com/duckdb/duckdb-go-bindings/lib/linux-amd64 v0.10504.0 // indirect
 	github.com/duckdb/duckdb-go-bindings/lib/linux-arm64 v0.10504.0 // indirect
 	github.com/duckdb/duckdb-go-bindings/lib/windows-amd64 v0.10504.0 // indirect
-	github.com/duckdb/duckdb-go/v2 v2.10504.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
