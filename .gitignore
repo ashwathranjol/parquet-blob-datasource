@@ -49,3 +49,6 @@ ci/
 
 # DuckDB extensions fetched by scripts/fetch-extensions.sh (not committed)
 duckdb_extensions/
+
+# Packaged plugin zips (built by CI / local validator runs)
+/*.zip

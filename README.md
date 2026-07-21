@@ -1,136 +1,128 @@
-# Grafana data source plugin template
+# Parquet Blob (Azure) — Grafana Datasource
 
-This template is a starting point for building a Data Source Plugin for Grafana.
+Query Apache Parquet files sitting in Azure Blob Storage with full SQL — joins, CTEs, window
+functions, `az://container/path/**/*.parquet` globs, Hive partitioning — powered by an embedded
+[DuckDB](https://duckdb.org/) engine. No ETL, no separate query service: point the plugin at a
+storage account and query the blobs directly.
 
-## What are Grafana data source plugins?
+![Dashboard built on Parquet Blob](src/img/dashboard.png)
 
-Grafana supports a wide range of data sources, including Prometheus, MySQL, and even Datadog. There’s a good chance you can already visualize metrics from the systems you have set up. In some cases, though, you already have an in-house metrics solution that you’d like to add to your Grafana dashboards. Grafana Data Source Plugins enables integrating such solutions with Grafana.
+## Requirements
 
-## Getting started
+- Grafana ≥ 12.3.0
+- The backend is CGO/native, so it ships for: **linux/amd64, linux/arm64, darwin/arm64**. There is
+  no Windows build — DuckDB does not publish an `azure` extension for the mingw platform the Go
+  driver produces on Windows, so the plugin cannot load blob storage support there. Grafana
+  running in Docker/Kubernetes on Linux — by far the common deployment shape — is unaffected.
 
-### Backend
+## Configure
 
-1. Update [Grafana plugin SDK for Go](https://grafana.com/developers/plugin-tools/key-concepts/backend-plugins/grafana-plugin-sdk-for-go) dependency to the latest minor version:
+Add a new **Parquet Blob (Azure)** datasource and fill in:
 
-   ```bash
-   go get -u github.com/grafana/grafana-plugin-sdk-go
-   go mod tidy
-   ```
+- **Storage account** — the Azure storage account name.
+- **Connection string** — stored encrypted (`secureJsonData`), never sent back to the browser.
+- **Max rows** — per-query row cap, default 1,000,000.
 
-2. Build plugin backend binaries for Linux, Windows and Darwin:
+![Datasource configuration](src/img/config-editor.png)
 
-   ```bash
-   mage -v
-   ```
+Click **Save & Test**. A green result means the plugin authenticated against Azure; the health
+check probes a container that shouldn't exist, so an auth-accepted 404 is treated as success.
 
-3. List all available Mage targets for additional commands:
+## Query
 
-   ```bash
-   mage -l
-   ```
+Queries are raw DuckDB SQL against `az://` URLs:
 
-### Frontend
+```sql
+SELECT ts, sensor_id, temp
+FROM 'az://telemetry/year=2026/**/*.parquet'
+WHERE $__timeFilter(ts)
+ORDER BY ts
+```
 
-1. Install dependencies
+Globs (`**/*.parquet`) and Hive-style partition directories (`year=2026/month=01/...`) work
+directly — DuckDB pushes predicates and column projection down into the Parquet reader. JOINs,
+CTEs, and window functions are all standard SQL.
 
-   ```bash
-   npm install
-   ```
+![Query editor](src/img/query-editor.png)
 
-2. Build plugin in development mode and run in watch mode
+### Time macros
 
-   ```bash
-   npm run dev
-   ```
+| Macro | Expands to |
+|---|---|
+| `$__timeFilter(col)` | `col >= TIMESTAMP '...' AND col <= TIMESTAMP '...'` (dashboard time range, UTC) |
+| `$__timeFrom` / `$__timeFrom()` | `TIMESTAMP '...'` (dashboard range start, UTC) |
+| `$__timeTo` / `$__timeTo()` | `TIMESTAMP '...'` (dashboard range end, UTC) |
 
-3. Build plugin in production mode
+### Formats
 
-   ```bash
-   npm run build
-   ```
+- **Table** — columns as returned, one row per SQL row.
+- **Time series** — requires *long* format: a time column first, optional string label columns,
+  then numeric value columns, sorted by time (`ORDER BY ts`). The plugin pivots this into Grafana's
+  wide time-series format (one field per label combination) automatically.
 
-4. Run the tests (using Jest)
+### Template variables
 
-   ```bash
-   # Runs the tests and watches for changes, requires git init first
-   npm run test
+Dashboard variables are expanded in the browser before the query reaches the backend. Add a
+`sensor` variable and reference it directly in SQL:
 
-   # Exits after running all the tests
-   npm run test:ci
-   ```
+```sql
+WHERE $__timeFilter(ts) AND sensor_id = '$sensor'
+```
 
-5. Spin up a Grafana instance and run the plugin inside it (using Docker)
+### Row limit
 
-   ```bash
-   npm run server
-   ```
+Every query is wrapped in an outer `LIMIT maxRows + 1`. If the extra row is present, the response
+carries a warning notice ("Row limit reached...") and the frame is truncated to `maxRows`. Raise
+the **Max rows** datasource setting if you need more.
 
-6. Run the E2E tests (using Playwright)
+## Local demo
 
-   ```bash
-   # Spins up a Grafana instance first that we tests against
-   npm run server
+```bash
+docker compose up -d
+go run ./cmd/seed
+```
 
-   # If you wish to start a certain Grafana version. If not specified will use latest by default
-   GRAFANA_VERSION=11.3.0 npm run server
+Opens Grafana at http://localhost:3000 with Azurite, a provisioned datasource, and a demo
+dashboard (`Parquet Blob Demo`) reading seeded sensor data.
 
-   # Starts the tests
-   npm run e2e
-   ```
+## Provisioning
 
-7. Run the linter
+```yaml
+apiVersion: 1
+datasources:
+  - name: Parquet Blob
+    type: ashwathranjol-parquetblob-datasource
+    access: proxy
+    jsonData:
+      accountName: <your-storage-account>
+      maxRows: 1000000
+    secureJsonData:
+      connectionString: "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;"
+```
 
-   ```bash
-   npm run lint
+## Troubleshooting
 
-   # or
+- **"No connection string configured"** — set the connection string in datasource settings.
+- **"Azure rejected the credentials"** — the storage account key/connection string is wrong or
+  expired.
+- **"Could not reach the storage account"** — network/endpoint problem; check the account name
+  and that the Grafana host can reach `*.blob.core.windows.net` (or your custom endpoint).
+- **"azure extension unavailable (plugin packaging problem)"** — the plugin zip is missing its
+  bundled `duckdb_extensions/` directory for the host platform; re-download the release asset.
+- SQL errors from DuckDB pass straight through to the panel (with any connection string
+  redacted), since they're usually the fastest way to find a typo or a bad path.
 
-   npm run lint:fix
-   ```
+## v1 limitations
 
-# Distributing your plugin
+Deliberate cuts, all reversible in a later release:
 
-When distributing a Grafana plugin either within the community or privately the plugin must be signed so the Grafana application can verify its authenticity. This can be done with the `@grafana/sign-plugin` package.
+- No visual query builder — raw SQL only.
+- Auth is connection string / account key only (no SAS token, service principal, or managed
+  identity).
+- No file/container browser UI.
+- No query result caching.
+- Azure Blob Storage only (no GCS/S3).
 
-_Note: It's not necessary to sign a plugin during development. The docker development environment that is scaffolded with `@grafana/create-plugin` caters for running the plugin without a signature._
+## License
 
-## Initial steps
-
-Before signing a plugin please read the Grafana [plugin publishing and signing criteria](https://grafana.com/legal/plugins/#plugin-publishing-and-signing-criteria) documentation carefully.
-
-`@grafana/create-plugin` has added the necessary commands and workflows to make signing and distributing a plugin via the grafana plugins catalog as straightforward as possible.
-
-Before signing a plugin for the first time please consult the Grafana [plugin signature levels](https://grafana.com/legal/plugins/#what-are-the-different-classifications-of-plugins) documentation to understand the differences between the types of signature level.
-
-1. Create a [Grafana Cloud account](https://grafana.com/signup).
-2. Make sure that the first part of the plugin ID matches the slug of your Grafana Cloud account.
-   - _You can find the plugin ID in the `plugin.json` file inside your plugin directory. For example, if your account slug is `acmecorp`, you need to prefix the plugin ID with `acmecorp-`._
-3. Create a Grafana Cloud API key with the `PluginPublisher` role.
-4. Keep a record of this API key as it will be required for signing a plugin
-
-## Signing a plugin
-
-### Using Github actions release workflow
-
-If the plugin is using the github actions supplied with `@grafana/create-plugin` signing a plugin is included out of the box. The [release workflow](./.github/workflows/release.yml) can prepare everything to make submitting your plugin to Grafana as easy as possible. Before being able to sign the plugin however a secret needs adding to the Github repository.
-
-1. Please navigate to "settings > secrets > actions" within your repo to create secrets.
-2. Click "New repository secret"
-3. Name the secret "GRAFANA_API_KEY"
-4. Paste your Grafana Cloud API key in the Secret field
-5. Click "Add secret"
-
-#### Push a version tag
-
-To trigger the workflow we need to push a version tag to github. This can be achieved with the following steps:
-
-1. Run `npm version <major|minor|patch>`
-2. Run `git push origin main --follow-tags`
-
-## Learn more
-
-Below you can find source code for existing app plugins and other related documentation.
-
-- [Basic data source plugin example](https://github.com/grafana/grafana-plugin-examples/tree/master/examples/datasource-basic#readme)
-- [`plugin.json` documentation](https://grafana.com/developers/plugin-tools/reference/plugin-json)
-- [How to sign a plugin?](https://grafana.com/developers/plugin-tools/publish-a-plugin/sign-a-plugin)
+Apache 2.0 — see [LICENSE](LICENSE).

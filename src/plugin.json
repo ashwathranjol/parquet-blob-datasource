@@ -17,8 +17,15 @@
       "small": "img/logo.svg",
       "large": "img/logo.svg"
     },
-    "links": [],
-    "screenshots": [],
+    "links": [
+      { "name": "GitHub", "url": "https://github.com/ashwathranjol/parquet-blob-datasource" },
+      { "name": "Issues", "url": "https://github.com/ashwathranjol/parquet-blob-datasource/issues" }
+    ],
+    "screenshots": [
+      { "name": "Dashboard", "path": "img/dashboard.png" },
+      { "name": "Query editor", "path": "img/query-editor.png" },
+      { "name": "Config editor", "path": "img/config-editor.png" }
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },
