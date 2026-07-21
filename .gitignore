@@ -52,3 +52,6 @@ duckdb_extensions/
 
 # Packaged plugin zips (built by CI / local validator runs)
 /*.zip
+
+# Internal planning/spec docs, not part of the published plugin
+/docs/superpowers/
