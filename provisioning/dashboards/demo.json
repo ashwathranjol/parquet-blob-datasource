@@ -1,0 +1,28 @@
+{
+  "title": "Parquet Blob Demo",
+  "uid": "parquetblob-demo",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Sensor temperature",
+      "gridPos": { "h": 12, "w": 16, "x": 0, "y": 0 },
+      "datasource": { "type": "ashwathranjol-parquetblob-datasource", "uid": "parquetblob-azurite" },
+      "targets": [{
+        "refId": "A",
+        "format": "timeseries",
+        "rawSql": "SELECT ts, sensor_id, temp FROM 'az://telemetry/year=2026/**/*.parquet' WHERE $__timeFilter(ts) ORDER BY ts"
+      }]
+    },
+    {
+      "id": 2, "type": "table", "title": "Latest readings",
+      "gridPos": { "h": 12, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "ashwathranjol-parquetblob-datasource", "uid": "parquetblob-azurite" },
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "rawSql": "SELECT ts, sensor_id, temp FROM 'az://telemetry/year=2026/**/*.parquet' WHERE $__timeFilter(ts) ORDER BY ts DESC LIMIT 20"
+      }]
+    }
+  ],
+  "schemaVersion": 39
+}
