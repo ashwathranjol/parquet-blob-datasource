@@ -82,6 +82,13 @@ jobs:
           path: dist/
       - name: Restore executable bits
         run: chmod +x dist/gpx_parquetblob_*
+      - name: Generate Go build manifest
+        run: |
+          : > dist/go_plugin_build_manifest
+          find . \( -path ./node_modules -o -path ./dist \) -prune -o -type f -name '*.go' -print | while IFS= read -r f; do
+            hash=$(sha256sum "$f" | cut -d' ' -f1)
+            echo "${hash}:${f#./}" >> dist/go_plugin_build_manifest
+          done
       - name: Sign plugin
         if: startsWith(github.ref, 'refs/tags/v')
         env:

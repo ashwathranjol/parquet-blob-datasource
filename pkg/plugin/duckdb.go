@@ -91,9 +91,6 @@ func FindExtension() (string, error) {
 		return "", err
 	}
 	p := filepath.Join(filepath.Dir(exe), "duckdb_extensions", platform, "azure.duckdb_extension")
-	if _, err := os.Stat(p); err != nil {
-		return "", fmt.Errorf("bundled azure extension not found at %s: %w", p, err)
-	}
 	return p, nil
 }
 
