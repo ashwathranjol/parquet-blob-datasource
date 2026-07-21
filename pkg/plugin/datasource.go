@@ -135,8 +135,9 @@ func (d *Datasource) query(ctx context.Context, q backend.DataQuery) backend.Dat
 	if qm.Format == "timeseries" {
 		wide, err := data.LongToWide(frame, nil)
 		if err != nil {
-			return backend.DataResponse{Error: fmt.Errorf(
-				"time series format needs a sorted time column plus value columns (long format): %w", err)}
+			return backend.DataResponse{Error: redact(fmt.Errorf(
+				"time series format needs a sorted time column plus value columns (long format): %w", err),
+				d.settings.ConnectionString)}
 		}
 		if frame.Meta != nil {
 			wide.SetMeta(frame.Meta)

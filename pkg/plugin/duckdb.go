@@ -71,8 +71,7 @@ func (e *Engine) Close() error { return e.db.Close() }
 // query; the +1 row lets the frame converter detect truncation.
 func wrapWithLimit(sqlText string, maxRows int64) string {
 	trimmed := strings.TrimRight(strings.TrimSpace(sqlText), "; \t\n\r")
-	trimmed = strings.TrimRight(strings.TrimSpace(trimmed), "; \t\n\r")
-	return "SELECT * FROM (" + trimmed + ") AS __grafana_q LIMIT " + strconv.FormatInt(maxRows+1, 10)
+	return "SELECT * FROM (" + trimmed + "\n) AS __grafana_q LIMIT " + strconv.FormatInt(maxRows+1, 10)
 }
 
 // FindExtension resolves the bundled azure extension for this OS/arch.

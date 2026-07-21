@@ -19,9 +19,10 @@ func newLocalEngine(t *testing.T) *Engine {
 
 func TestWrapWithLimit(t *testing.T) {
 	cases := []struct{ name, in, want string }{
-		{"plain", "SELECT 1", "SELECT * FROM (SELECT 1) AS __grafana_q LIMIT 11"},
-		{"trailing semicolon", "SELECT 1;", "SELECT * FROM (SELECT 1) AS __grafana_q LIMIT 11"},
-		{"trailing whitespace and semicolons", "SELECT 1 ;\n ;", "SELECT * FROM (SELECT 1) AS __grafana_q LIMIT 11"},
+		{"plain", "SELECT 1", "SELECT * FROM (SELECT 1\n) AS __grafana_q LIMIT 11"},
+		{"trailing semicolon", "SELECT 1;", "SELECT * FROM (SELECT 1\n) AS __grafana_q LIMIT 11"},
+		{"trailing whitespace and semicolons", "SELECT 1 ;\n ;", "SELECT * FROM (SELECT 1\n) AS __grafana_q LIMIT 11"},
+		{"trailing line comment", "SELECT 1 -- note", "SELECT * FROM (SELECT 1 -- note\n) AS __grafana_q LIMIT 11"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
